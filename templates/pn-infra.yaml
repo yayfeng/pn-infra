@@ -21,7 +21,7 @@ Resources:
   VPC:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplateBucket}/templates/VPC.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/VPC.yaml"
       Parameters:
         EnvName: !Ref EnvName
         EnvNumber: !Ref EnvNumber
@@ -30,7 +30,7 @@ Resources:
   ECSCluster:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplateBucket}/templates/ecs_deployment.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/ecs_deployment.yaml"
       Parameters:
         Subnets:
           - !GetAtt VPC.Outputs.PublicSubnet1Id
