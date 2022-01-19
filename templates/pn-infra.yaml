@@ -13,7 +13,7 @@ Parameters:
     Description: Second byte from the left for VPC CIDR
   TemplateBucket:
     Type: String
-    Default: seed-pipeline-pnpipelinebucket-1j97m0irh9lfj
+    Default: pagopa-pn-infra-common-template
     Description: >
       The S3 bucket from which to fetch the templates used by this stack.
 
