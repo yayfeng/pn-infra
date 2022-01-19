@@ -36,6 +36,6 @@ Resources:
           Fn::Join:
             - ","
             - - !GetAtt VPC.Outputs.PublicSubnet1Id
-              - !GetAtt VPC.Outputs.PublicSubnet2Id            
+              - !GetAtt VPC.Outputs.PublicSubnet2Id
         VpcId: !GetAtt VPC.Outputs.VpcId
-
+        EnvName: !Ref EnvName

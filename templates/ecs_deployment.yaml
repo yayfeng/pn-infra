@@ -25,6 +25,9 @@ Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
     Default: 'vpc-06d18bc39da6d23fe'
+  EnvName:
+    Type: String
+    Description: Nome dell'ambiente destinazione
 
 
 Conditions:
@@ -98,7 +101,7 @@ Resources:
   Cluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: !Ref AWS::StackName
+      ClusterName: !Sub ${EnvName}-ecs-cluster
 
   AutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
