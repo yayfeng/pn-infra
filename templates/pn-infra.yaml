@@ -1,0 +1,36 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+
+Description: >
+  This template deploys the base infra for PN
+Parameters:
+  EnvName:
+    Type: String
+    Description: Nome dell'ambiente destinazione
+  EnvNumber:
+    Type: String
+    Description: Second byte from the left for VPC CIDR
+  TemplateBucket:
+    Type: String
+    Default: seed-pipeline-pnpipelinebucket-1j97m0irh9lfj
+    Description: >
+      The S3 bucket from which to fetch the templates used by this stack.
+
+Resources:
+  VPC:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplateBucket}/templates/VPC.yaml"
+      Parameters:
+        EnvName: !Ref EnvName
+        EnvNumber: !Ref EnvNumber
+
+Outputs:
+  ServiceUrl:
+    Description: The sample service that is being continuously deployed.
+    Value: !GetAtt LoadBalancer.Outputs.ServiceUrl
+
+  PipelineUrl:
+    Description: The continuous deployment pipeline in the AWS Management Console.
+    Value: !GetAtt DeploymentPipeline.Outputs.PipelineUrl

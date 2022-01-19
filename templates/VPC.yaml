@@ -1,0 +1,459 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  EnvName:
+    Type: String
+    Description: Nome dell'ambiente destinazione
+  EnvNumber:
+    Type: String
+    Description: Second byte from the left for VPC CIDR
+
+
+Resources:
+
+  # Microservices VPC:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Join ['', ["10.", !Ref "EnvNumber", ".0.0/16" ]]
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvName}-VPC
+
+  InterfaceSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Controls Inbound Access to the VPC Interface Endpoint from within the VPC'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - FromPort: '0'
+          ToPort: '65535'
+          IpProtocol: tcp
+          CidrIp: !Join ['', ["10.", !Ref "EnvNumber", ".0.0/16" ]]
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvName}-Interface-Endpoint-SecGrp'
+
+  # Internet connections
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvName}-VPC
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  # Public subnets commons
+
+
+  # Public subnet 1
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Join ['', ["10.", !Ref "EnvNumber", ".1.0/24" ]]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvName} Public Subnet (AZ1)
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable1
+      SubnetId: !Ref PublicSubnet1
+  PublicRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvName} Public Routes
+  DefaultPublicRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Public subnet 2
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Join [ '', [ "10.", !Ref "EnvNumber", ".2.0/24" ] ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvName} Public Subnet (AZ2)
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable2
+      SubnetId: !Ref PublicSubnet2
+  PublicRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvName} Public Routes
+  DefaultPublicRoute2:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Connection to AWS Services
+  S3VPCGatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Gateway
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action: '*'
+            Effect: Allow
+            Resource: '*'
+            Principal: '*'
+      RouteTableIds:
+        - !Ref 'PublicRouteTable1'
+        - !Ref 'PublicRouteTable2'
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcId: !Ref VPC
+  CassandraInterfaceEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref InterfaceSecurityGroup
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.cassandra'
+      SubnetIds:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      VpcId: !Ref VPC
+    DependsOn:
+      - PublicRouteTable1
+      - PublicRouteTable2
+  SQSInterfaceEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref InterfaceSecurityGroup
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.sqs'
+      SubnetIds:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      VpcId: !Ref VPC
+    DependsOn:
+      - PublicRouteTable1
+      - PublicRouteTable2
+
+  # Network security groups
+  WebappSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvName}-webapp-security-group
+      GroupDescription: "ingres tcp 8080, egress all"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: "0.0.0.0/0"
+      VpcId: !Ref VPC
+  # Application load balancer
+  PrivateApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref WebappSecurityGroup
+
+  # Network load balancer
+  PrivateNetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: network
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+
+  ExtChaPrivateApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref WebappSecurityGroup
+
+  ExtChaPrivateNetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: network
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+
+  # API Gateway integrations
+  PrivateNlbLink:
+    Type: AWS::ApiGateway::VpcLink
+    Properties:
+      Name: !Sub '${EnvName}-priv-nlb-link'
+      Description: "API-GW link to Network load balancer"
+      TargetArns:
+        - !Ref PrivateNetworkLoadBalancer
+
+  ExtChaPrivateNlbLink:
+    Type: AWS::ApiGateway::VpcLink
+    Properties:
+      Name: !Sub '${EnvName}-extcha-priv-nlb-link'
+      Description: "API-GW link to External Channel Network load balancer"
+      TargetArns:
+        - !Ref ExtChaPrivateNetworkLoadBalancer
+  #PrivateAlbLink:
+  #  Type: AWS::ApiGatewayV2::VpcLink
+  #  Properties:
+  #    Name: !Sub '${EnvName}-priv-alb-link'
+  #    SecurityGroupIds:
+  #      - !Ref WebappSecurityGroup
+  #    SubnetIds:
+  #      - !Ref PublicSubnet1
+  #      - !Ref PublicSubnet2
+
+  # Comunication queues
+  DeliveryPushInputsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${EnvName}-delivery_push_inputs'
+      DelaySeconds: 1
+      MessageRetentionPeriod: 36000 # 10h
+      ReceiveMessageWaitTimeSeconds: 5
+      VisibilityTimeout: 10 # seconds
+  DeliveryPushActionsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${EnvName}-delivery_push_actions'
+      DelaySeconds: 1
+      MessageRetentionPeriod: 36000 # 10h
+      ReceiveMessageWaitTimeSeconds: 5
+      VisibilityTimeout: 10 # seconds
+  ExternalChannelsInputsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${EnvName}-external_channel_inputs'
+      DelaySeconds: 1
+      MessageRetentionPeriod: 36000 # 10h
+      ReceiveMessageWaitTimeSeconds: 5
+      VisibilityTimeout: 10 # seconds
+  ExternalChannelsOutputsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${EnvName}-external_channel_outputs'
+      DelaySeconds: 1
+      MessageRetentionPeriod: 36000 # 10h
+      ReceiveMessageWaitTimeSeconds: 5
+      VisibilityTimeout: 10 # seconds
+  ExternalChannelsElabResQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${EnvName}-external_channel_elab_res'
+      DelaySeconds: 1
+      MessageRetentionPeriod: 36000 # 10h
+      ReceiveMessageWaitTimeSeconds: 5
+      VisibilityTimeout: 10 # seconds
+
+  # External comunication queue
+  DeliveryPushActionsDoneQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${EnvName}-delivery_push_actions-done'
+      DelaySeconds: 2
+      MessageRetentionPeriod: 36000 # 10h
+      ReceiveMessageWaitTimeSeconds: 5
+      VisibilityTimeout: 10 # seconds
+
+  AttachmentsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      # No default retentin neither legal hold.
+      # Can define retention period or legal hold when upload new object or version
+      ObjectLockEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedOrigins:
+              #- { 'Fn::ImportValue': { 'Fn::Sub':'${EnvName}-cdn-url'}}
+              - "*"
+            ExposedHeaders:
+              - "x-amz-version-id"
+
+
+Outputs:
+  # - API Gateway access informations
+  PrivateNetworkLoadBalancer:
+    Value: !Ref PrivateNetworkLoadBalancer
+    Description: Identificativo VPC Network Load Balancer
+    Export:
+      Name: !Sub '${EnvName}-nlb-id'
+  PrivateApplicationLoadBalancer:
+    Value: !Ref PrivateApplicationLoadBalancer
+    Description: Identificativo VPC Application Load Balancer
+    Export:
+      Name: !Sub '${EnvName}-alb-id'
+  PrivateNlbLink:
+    Value: !Ref PrivateNlbLink
+    Description: Used by API-Gw to connect into VPC
+    Export:
+      Name: !Sub '${EnvName}-nlb-link-id'
+  ExtChaPrivateNlbLink:
+    Value: !Ref ExtChaPrivateNlbLink
+    Description: Used by API-Gw to connect into VPC
+    Export:
+      Name: !Sub '${EnvName}-extcha-nlb-link-id'
+  ExtChaPrivateNetworkLoadBalancer:
+    Value: !Ref ExtChaPrivateNetworkLoadBalancer
+    Description: Id VPC External Channel nlb
+    Export:
+      Name: !Sub '${EnvName}-extcha-nlb-id'
+  ExtChaPrivateApplicationLoadBalancer:
+    Value: !Ref ExtChaPrivateApplicationLoadBalancer
+    Description: Id VPC External Channel alb
+    Export:
+      Name: !Sub '${EnvName}-extcha-alb-id'
+  PrivateApplicationLoadBalancerDomain:
+    Value: !Sub '${PrivateApplicationLoadBalancer.DNSName}'
+    Description: Identificativo VPC Application Load Balancer
+    Export:
+      Name: !Sub '${EnvName}-alb-domain'
+  ExtChaPrivateApplicationLoadBalancerDomain:
+    Value: !Sub '${ExtChaPrivateApplicationLoadBalancer.DNSName}'
+    Description: Identificativo VPC Application Load Balancer
+    Export:
+      Name: !Sub '${EnvName}-extcha-alb-domain'
+  VpcId:
+    Value: !Ref VPC
+    Description: Id della VPC
+    Export:
+      Name: !Sub '${EnvName}-vpc-id'
+  PublicSubnet1Id:
+    Value: !Ref PublicSubnet1
+    Description: Id subnet 1
+    Export:
+      Name: !Sub '${EnvName}-subnet1'
+  PublicSubnet2Id:
+    Value: !Ref PublicSubnet2
+    Description: Id subnet 2
+    Export:
+      Name: !Sub '${EnvName}-subnet2'
+  DeliveryPushInputsQueueArn:
+    Value: !Sub '${DeliveryPushInputsQueue.Arn}'
+    Description: 'workflow input events queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-delpush-input-queue-arn'
+  DeliveryPushInputsQueueName:
+    Value: !Sub '${DeliveryPushInputsQueue.QueueName}'
+    Description: 'workflow input events queue Name'
+    Export:
+      Name: !Sub '${EnvName}-delpush-input-queue-name'
+  DeliveryPushActionsQueueArn:
+    Value: !Sub '${DeliveryPushActionsQueue.Arn}'
+    Description: 'workflow actions queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-delpush-actions-queue-arn'
+  DeliveryPushActionsQueueName:
+    Value: !Sub '${DeliveryPushActionsQueue.QueueName}'
+    Description: 'workflow actions queue Name'
+    Export:
+      Name: !Sub '${EnvName}-delpush-actions-queue-name'
+  ExternalChannelsInputsQueueArn:
+    Value: !Sub '${ExternalChannelsInputsQueue.Arn}'
+    Description: 'external channel input events queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-input-queue-arn'
+  ExternalChannelsInputsQueueName:
+    Value: !Sub '${ExternalChannelsInputsQueue.QueueName}'
+    Description: 'external channel input events queue Name'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-input-queue-name'
+  ExternalChannelsOutputsQueueArn:
+    Value: !Sub '${ExternalChannelsOutputsQueue.Arn}'
+    Description: 'external channel output events queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-output-queue-arn'
+  ExternalChannelsOutputsQueueName:
+    Value: !Sub '${ExternalChannelsOutputsQueue.QueueName}'
+    Description: 'external channel output events queue Name'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-output-queue-name'
+  DeliveryPushActionsDoneQueueArn:
+    Value: !Sub '${DeliveryPushActionsDoneQueue.Arn}'
+    Description: 'workflow actions done queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-delpush-actions-done-queue-arn'
+  DeliveryPushActionsDoneQueueName:
+    Value: !Sub '${DeliveryPushActionsDoneQueue.QueueName}'
+    Description: 'workflow actions done queue Name'
+    Export:
+      Name: !Sub '${EnvName}-delpush-actions-done-queue-name'
+  ExternalChannelsElabResQueueArn:
+    Value: !Sub '${ExternalChannelsElabResQueue.Arn}'
+    Description: 'external channel ElabRes events queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-elabres-queue-arn'
+  ExternalChannelsElabResQueueName:
+    Value: !Sub '${ExternalChannelsElabResQueue.QueueName}'
+    Description: 'external channel ElabRes events queue Name'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-elabres-queue-name'
+  AttachmentsBucketName:
+    Value: !Sub '${AttachmentsBucket}'
+    Description: 'Attachments bucket Name'
+    Export:
+      Name: !Sub '${EnvName}-attachments-bucket-name'
+  AttachmentsBucketArn:
+    Value: !Sub '${AttachmentsBucket.Arn}'
+    Description: 'Attachments bucket ARN'
+    Export:
+      Name: !Sub '${EnvName}-attachments-bucket-arn'
+
