@@ -175,3 +175,5 @@ Resources:
 Outputs:
   ClusterName:
       Value: !Ref Cluster
+      Export:
+        Name: !Sub '${EnvName}-ecs-cluster-name'
