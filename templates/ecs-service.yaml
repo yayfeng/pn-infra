@@ -1,0 +1,747 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECS Service
+
+Parameters:
+  EnvName:
+    Type: String
+    Description: Nome dell'ambiente destinazione
+
+  MicroServiceName:
+    Type: String
+    Description: Microservice name
+
+  ECSClusterName:
+    Type: String
+    Description: ECS Cluster Name
+
+  ContainerImageURI:
+    Type: String
+    Description: Container image URI
+
+  ExposeAPIGW:
+    Type: String
+    Default: 'NO'
+    AllowedValues:
+      - 'YES'
+      - 'NO'
+
+  CdnUrl:
+    Type: String
+    Default: 'pn.com'
+
+Conditions:
+  ShouldExposeAPIGW: !Equals [ !Ref ExposeAPIGW, "YES" ]
+
+
+Resources:
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    # Makes sure the log group is created before it is used.
+    DependsOn: LogGroup
+    Properties:
+      # Name of the task definition. Subsequent versions of the task definition are grouped together under this name.
+      Family: !Join [ '', [ !Ref EnvName, !Ref MicroServiceName ] ]
+      # awsvpc is required for Fargate
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      # 256 (.25 vCPU) - Available memory values: 0.5GB, 1GB, 2GB
+      # 512 (.5 vCPU) - Available memory values: 1GB, 2GB, 3GB, 4GB
+      # 1024 (1 vCPU) - Available memory values: 2GB, 3GB, 4GB, 5GB, 6GB, 7GB, 8GB
+      # 2048 (2 vCPU) - Available memory values: Between 4GB and 16GB in 1GB increments
+      # 4096 (4 vCPU) - Available memory values: Between 8GB and 30GB in 1GB increments
+      Cpu: 1024
+      # 0.5GB, 1GB, 2GB - Available cpu values: 256 (.25 vCPU)
+      # 1GB, 2GB, 3GB, 4GB - Available cpu values: 512 (.5 vCPU)
+      # 2GB, 3GB, 4GB, 5GB, 6GB, 7GB, 8GB - Available cpu values: 1024 (1 vCPU)
+      # Between 4GB and 16GB in 1GB increments - Available cpu values: 2048 (2 vCPU)
+      # Between 8GB and 30GB in 1GB increments - Available cpu values: 4096 (4 vCPU)
+      Memory: 2GB
+      # A role needed by ECS.
+      # "The ARN of the task execution role that containers in this task can assume. All containers in this task are granted the permissions that are specified in this role."
+      # "There is an optional task execution IAM role that you can specify with Fargate to allow your Fargate tasks to make API calls to Amazon ECR."
+      ExecutionRoleArn: !Ref ExecutionRole
+      # "The Amazon Resource Name (ARN) of an AWS Identity and Access Management (IAM) role that grants containers in the task permission to call AWS APIs on your behalf."
+      TaskRoleArn: !Ref TaskRole
+      ContainerDefinitions:
+        - Name: !Sub '${EnvName}-${MicroServiceName}'
+          Image: !Ref ContainerImageURI
+          Environment:
+            - Name: AWS_REGIONCODE
+              Value: !Ref AWS::Region
+            - Name: PN_DELIVERY_TOPICS_NEWNOTIFICATIONS
+              Value: !ImportValue { "Fn::Sub": '${EnvName}-delpush-input-queue-name' }
+            - Name: PN_DELIVERY_EXTERNALCHANNELBASEURL
+              Value: !Join [ '', [ "http://", { 'Fn::ImportValue': { 'Fn::Sub': '${EnvName}-extcha-alb-domain' } }, ":8080/external-channel" ] ]
+            - Name: AWS_BUCKETNAME
+              Value: !ImportValue { "Fn::Sub": '${EnvName}-attachments-bucket-name' }
+            - Name: PN_DELIVERY_IUNRETRY
+              Value: 3
+            - Name: SPRING_DATA_CASSANDRA_SSL
+              Value: true
+            - Name: SPRING_DATA_CASSANDRA_CONTACTPOINTS
+              Value: !Sub 'cassandra.${AWS::Region}.${AWS::URLSuffix}:9142'
+          PortMappings:
+            - ContainerPort: 8080
+          # Send logs to CloudWatch Logs
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref AWS::Region
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+  # A role needed by ECS
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join [ '', [ !Ref EnvName, !Ref MicroServiceName ,ExecutionRole ] ]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+  # A role for the containers
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join [ '', [ !Ref EnvName, !Ref MicroServiceName, TaskRole ] ]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+  TaskPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${EnvName}-inst-${MicroServiceName}-policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sqs:ChangeMessageVisibility
+              - sqs:ChangeMessageVisibilityBatch
+              - sqs:DeleteMessage
+              - sqs:DeleteMessageBatch
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+              - sqs:ReceiveMessage
+              - sqs:SendMessage
+              - sqs:SendMessageBatch
+            Resource:
+              - !ImportValue { "Fn::Sub": '${EnvName}-delpush-input-queue-arn' }
+              - !ImportValue { "Fn::Sub": '${EnvName}-extchannel-input-queue-arn' }
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectAcl
+              - s3:GetObjectLegalHold
+              - s3:GetObjectRetention
+              - s3:GetObjectTagging
+              - s3:GetObjectVersion
+              - s3:GetObjectVersionAcl
+              - s3:GetObjectVersionTagging
+              - s3:PutObject
+              - s3:PutObjectLegalHold
+              - s3:PutObjectRetention
+              - s3:PutObjectTagging
+              - s3:PutObjectVersionTagging
+            Resource:
+              - !Join
+                - '/'
+                - - !ImportValue { "Fn::Sub": '${EnvName}-attachments-bucket-arn' }
+                  - '*'
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              - !ImportValue { "Fn::Sub": '${EnvName}-attachments-bucket-arn' }
+          - Effect: Allow
+            Action:
+              - cassandra:Modify
+              - cassandra:Select
+            Resource:
+              - !Sub "arn:aws:cassandra:*:${AWS::AccountId}:/keyspace/*/table/*"
+      Roles:
+        - !Ref TaskRole
+  # A role needed for auto scaling
+  AutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join [ '', [ !Ref EnvName, !Ref MicroServiceName, AutoScalingRole ] ]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole'
+  ContainerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Join [ '', [ !Ref EnvName, !Ref MicroServiceName, ContSecGrp ] ]
+      VpcId: !ImportValue
+        "Fn::Sub": '${EnvName}-vpc-id'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+          #SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Join [ '', [ !Ref EnvName, !Ref MicroServiceName, LbSecGrp ] ]
+      VpcId: !ImportValue
+        "Fn::Sub": '${EnvName}-vpc-id'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - LoadBalancerListener
+      - NetLoadBalancerListener
+    # This dependency is needed so that the load balancer is setup correctly in time
+    #DependsOn:
+    #  - ListenerHTTP
+    Properties:
+      #ServiceName: !Sub '${EnvName}-delivery'
+      Cluster: !Ref ECSClusterName
+      TaskDefinition: !Ref TaskDefinition
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+      DesiredCount: 1
+      # This may need to be adjusted if the container takes a while to start up
+      #HealthCheckGracePeriodSeconds: 30
+      LaunchType: FARGATE
+      PlatformVersion: 1.3.0
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          # change to DISABLED if you're using private subnets that have access to a NAT gateway
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !ImportValue { "Fn::Sub": '${EnvName}-subnet1' }
+            - !ImportValue { "Fn::Sub": '${EnvName}-subnet2' }
+          SecurityGroups:
+            - !Ref ContainerSecurityGroup
+      LoadBalancers:
+        - ContainerName: !Sub '${EnvName}-${MicroServiceName}'
+          ContainerPort: 8080
+          TargetGroupArn: !Ref TargetGroup
+        - ContainerName: !Sub '${EnvName}-${MicroServiceName}'
+          ContainerPort: 8080
+          TargetGroupArn: !Ref NetTargetGroup
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      #Name: !Sub ${EnvName}-delivery-tgrp
+      TargetType: ip
+      Protocol: HTTP
+      Port: 8080
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 300
+      HealthCheckPath: /
+      HealthCheckPort: 8080
+      HealthCheckProtocol: HTTP
+      Matcher:
+        HttpCode: 303
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 60 # default is 300
+      VpcId: !ImportValue
+        "Fn::Sub": '${EnvName}-vpc-id'
+
+  WebappSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvName}-${MicroServiceName}-webapp-security-group
+      GroupDescription: "ingres tcp 8080, egress all"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: "0.0.0.0/0"
+      VpcId: !ImportValue
+        "Fn::Sub": '${EnvName}-vpc-id'
+
+  PrivateApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets:
+        - !ImportValue { "Fn::Sub": '${EnvName}-subnet1' }
+        - !ImportValue { "Fn::Sub": '${EnvName}-subnet2' }
+      SecurityGroups:
+        - !Ref WebappSecurityGroup
+
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref PrivateApplicationLoadBalancer
+      Protocol: HTTP
+      Port: 8080
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+          Order: 1
+
+  NetTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      #Name: !Sub ${EnvName}-delivery-nlb-tg
+      TargetType: ip
+      Protocol: TCP
+      Port: 8080
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 60 # default is 300
+      VpcId: !ImportValue
+        "Fn::Sub": '${EnvName}-vpc-id'
+
+  PrivateNetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: network
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets:
+        - !ImportValue { "Fn::Sub": '${EnvName}-subnet1' }
+        - !ImportValue { "Fn::Sub": '${EnvName}-subnet2' }
+
+  NetLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref PrivateNetworkLoadBalancer
+      Protocol: TCP
+      Port: 8080
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref NetTargetGroup
+          Order: 1
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join [ '', [ /ecs/, !Ref EnvName, !Ref MicroServiceName ] ]
+      RetentionInDays: 3
+  AutoScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MinCapacity: 2
+      MaxCapacity: 5
+      ResourceId: !Join [ '/', [ service, !Ref ECSClusterName, !GetAtt ECSService.Name ] ]
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      # "The Amazon Resource Name (ARN) of an AWS Identity and Access Management (IAM) role that allows Application Auto Scaling to modify your scalable target."
+      RoleARN: !GetAtt AutoScalingRole.Arn
+  AutoScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Join [ '', [ !Ref EnvName, !Ref MicroServiceName, AutoScalingPolicy ] ]
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AutoScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleInCooldown: 10
+        ScaleOutCooldown: 10
+        # Keep things at or lower than 50% CPU utilization, for example
+        TargetValue: 60
+
+  #############################################################################
+  ###                         PROXY TO DELIVERY API                         ###
+  #############################################################################
+  # API Gateway integrations
+  PrivateNlbLink:
+    Condition: ShouldExposeAPIGW
+    Type: AWS::ApiGateway::VpcLink
+    Properties:
+      Name: !Sub '${EnvName}-${MicroServiceName}-priv-nlb-link'
+      Description: "API-GW link to Network load balancer"
+      TargetArns:
+        - !Ref PrivateNetworkLoadBalancer
+
+  ApiGwRestApi:
+    DependsOn: ApiGwAccountConfig
+    Type: AWS::ApiGateway::RestApi
+    Condition: ShouldExposeAPIGW
+    Properties:
+      Name: !Sub '${EnvName}-${MicroServiceName}-public-api'
+      Description: Api che effettuano proxy ai microservizi di back-end
+      FailOnWarnings: true
+      BinaryMediaTypes:
+        - 'image~1png'
+        - 'image~1jpeg'
+        - 'application~1pdf'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+  ApiGwRestApiDeliveryRes:
+    Type: AWS::ApiGateway::Resource
+    Condition: ShouldExposeAPIGW
+    Properties:
+      RestApiId: !Ref ApiGwRestApi
+      ParentId: !GetAtt ApiGwRestApi.RootResourceId
+      PathPart: delivery
+  ApiGwRestApiDeliveryResV3:
+    Condition: ShouldExposeAPIGW
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGwRestApi
+      ParentId: !Ref ApiGwRestApiDeliveryRes
+      PathPart: v3
+  ApiGwRestApiDeliveryResV3ApiDocs:
+    Condition: ShouldExposeAPIGW
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGwRestApi
+      ParentId: !Ref ApiGwRestApiDeliveryResV3
+      PathPart: api-docs
+  ApiGwRestApiDeliveryRes2:
+    Condition: ShouldExposeAPIGW
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGwRestApi
+      ParentId: !Ref ApiGwRestApiDeliveryRes
+      PathPart: '{proxy+}'
+  ApiGwRestApiDeliveryAnyMethod:
+    Condition: ShouldExposeAPIGW
+    Type: AWS::ApiGateway::Method
+    Properties:
+      OperationName: proxy to delivery
+      RestApiId: !Ref ApiGwRestApi
+      ResourceId: !Ref ApiGwRestApiDeliveryRes2
+      HttpMethod: ANY
+      ApiKeyRequired: true
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.proxy: true
+        method.request.header.X-PagoPA-PN-PA: false
+        method.request.header.X-PagoPA-User-Id: false
+        method.request.header.X-PagoPA-User-Secret: false
+        method.request.header.user_secret: false
+        method.request.querystring.recipientId: false
+        method.request.querystring.senderId: false
+        method.request.querystring.startDate: false
+        method.request.querystring.endDate: false
+        method.request.querystring.status: false
+        method.request.querystring.subjectRegExp: false
+        method.request.querystring.token: false
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+            method.response.header.Content-Type: false
+            method.response.header.Content-Disposition: false
+        - StatusCode: 307
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+            method.response.header.Content-Type: false
+            method.response.header.Content-Disposition: false
+            method.response.header.Location: false
+        - StatusCode: 400
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+            method.response.header.Content-Type: false
+            method.response.header.Content-Disposition: false
+            method.response.header.Location: false
+        - StatusCode: 401
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+            method.response.header.Content-Type: false
+            method.response.header.Content-Disposition: false
+            method.response.header.Location: false
+        - StatusCode: 404
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+            method.response.header.Content-Type: false
+            method.response.header.Content-Disposition: false
+            method.response.header.Location: false
+        - StatusCode: 500
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+            method.response.header.Content-Type: false
+            method.response.header.Content-Disposition: false
+            method.response.header.Location: false
+      Integration:
+        ConnectionType: VPC_LINK
+        ConnectionId: !Ref PrivateNlbLink
+        IntegrationHttpMethod: ANY
+        Type: HTTP
+        #Uri: !Sub 'http://${PrivateApplicationLoadBalancer.DNSName}:8080/delivery/{proxy}'
+        Uri: !Join ['', ["http://", !GetAtt PrivateApplicationLoadBalancer.DNSName, ":8080/delivery/{proxy}"]]
+        RequestParameters:
+          integration.request.path.proxy: method.request.path.proxy
+          integration.request.header.X-PagoPA-PN-PA: method.request.header.X-PagoPA-PN-PA
+          integration.request.header.X-PagoPA-User-Id: method.request.header.X-PagoPA-User-Id
+          integration.request.header.X-PagoPA-User-Secret: method.request.header.X-PagoPA-User-Secret
+          integration.request.header.user_secret: method.request.header.user_secret
+          integration.request.querystring.recipientId: method.request.querystring.recipientId
+          integration.request.querystring.senderId: method.request.querystring.senderId
+          integration.request.querystring.startDate: method.request.querystring.startDate
+          integration.request.querystring.endDate: method.request.querystring.endDate
+          integration.request.querystring.status: method.request.querystring.status
+          integration.request.querystring.subjectRegExp: method.request.querystring.subjectRegExp
+          integration.request.querystring.token: method.request.querystring.token
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        TimeoutInMillis: 29000
+        IntegrationResponses:
+          - StatusCode: 200
+            SelectionPattern: ""
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: !Join ['', ["'", !Ref CdnUrl, "'"]]
+              method.response.header.Content-Type: integration.response.header.Content-Type
+              method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+            ResponseTemplates:
+              application/json: ""
+          - StatusCode: 307
+            SelectionPattern: 307
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: !Join [ '', [ "'", !Ref CdnUrl, "'" ] ]
+              method.response.header.Content-Type: integration.response.header.Content-Type
+              method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+              method.response.header.Location: integration.response.header.Location
+            ResponseTemplates:
+              application/json: ""
+          - StatusCode: 400
+            SelectionPattern: 400
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: !Join [ '', [ "'", !Ref CdnUrl, "'" ] ]
+              method.response.header.Content-Type: integration.response.header.Content-Type
+              method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+              method.response.header.Location: integration.response.header.Location
+            ResponseTemplates:
+              application/json: ""
+          - StatusCode: 401
+            SelectionPattern: 401
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: !Join [ '', [ "'", !Ref CdnUrl, "'" ] ]
+              method.response.header.Content-Type: integration.response.header.Content-Type
+              method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+              method.response.header.Location: integration.response.header.Location
+            ResponseTemplates:
+              application/json: ""
+          - StatusCode: 404
+            SelectionPattern: 404
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: !Join [ '', [ "'", !Ref CdnUrl, "'" ] ]
+              method.response.header.Content-Type: integration.response.header.Content-Type
+              method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+              method.response.header.Location: integration.response.header.Location
+            ResponseTemplates:
+              application/json: ""
+          - StatusCode: 500
+            SelectionPattern: 500
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: !Join [ '', [ "'", !Ref CdnUrl, "'" ] ]
+              method.response.header.Content-Type: integration.response.header.Content-Type
+              method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+              method.response.header.Location: integration.response.header.Location
+            ResponseTemplates:
+              application/json: ""
+  ApiGwRestApiDeliveryCORSMethod:
+    Condition: ShouldExposeAPIGW
+    Type: AWS::ApiGateway::Method
+    Properties:
+      OperationName: CORS for delivery
+      RestApiId: !Ref ApiGwRestApi
+      ResourceId: !Ref ApiGwRestApiDeliveryRes2
+      HttpMethod: OPTIONS
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.proxy: true
+        method.request.header.X-PagoPA-PN-PA: true
+        method.request.header.X-PagoPA-User-Id: true
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+          ResponseModels:
+            application/json: Empty
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: "{\"statusCode\": 200}"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        TimeoutInMillis: 29000
+        CacheNamespace: "w053mc"
+        CacheKeyParameters: [ ]
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: !Join ['', ["'", !Ref CdnUrl, "'"]]
+            ResponseTemplates:
+              application/json: ""
+  ApiGwRestApiDeliveryApiDocsGetMethod:
+    Condition: ShouldExposeAPIGW
+    Type: AWS::ApiGateway::Method
+    Properties:
+      OperationName: get documentation
+      RestApiId: !Ref ApiGwRestApi
+      ResourceId: !Ref ApiGwRestApiDeliveryResV3ApiDocs
+      HttpMethod: GET
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+      Integration:
+        ConnectionType: VPC_LINK
+        ConnectionId: !Ref PrivateNlbLink
+        IntegrationHttpMethod: GET
+        Type: HTTP
+        #Uri: !Sub 'http://${PrivateApplicationLoadBalancer.DNSName}:8080/delivery/{proxy}'
+        Uri: !Join ['', ["http://", !GetAtt PrivateApplicationLoadBalancer.DNSName, ":8080/delivery/v3/api-docs"]]
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        TimeoutInMillis: 29000
+        IntegrationResponses:
+          - StatusCode: 200
+            SelectionPattern: ""
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ""
+  ApiGwRestApiDeliveryApiDocsCORSMethod:
+    Condition: ShouldExposeAPIGW
+    Type: AWS::ApiGateway::Method
+    Properties:
+      OperationName: CORS for delivery
+      RestApiId: !Ref ApiGwRestApi
+      ResourceId: !Ref ApiGwRestApiDeliveryResV3ApiDocs
+      HttpMethod: OPTIONS
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+          ResponseModels:
+            application/json: Empty
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: "{\"statusCode\": 200}"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        TimeoutInMillis: 29000
+        CacheNamespace: "w053mc"
+        CacheKeyParameters: [ ]
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ""
+  ApiGwRestApiBetaDeployment:
+    Condition: ShouldExposeAPIGW
+
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - ApiGwRestApiDeliveryAnyMethod
+      - ApiGwRestApiDeliveryCORSMethod
+      - ApiGwRestApiDeliveryApiDocsGetMethod
+      - ApiGwRestApiDeliveryApiDocsCORSMethod
+    Properties:
+      RestApiId: !Ref ApiGwRestApi
+      Description: 'Beta deployment for rest api gw'
+  ApiGwRestApiBetaStage:
+    Condition: ShouldExposeAPIGW
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref ApiGwRestApi
+      StageName: beta
+      TracingEnabled: true
+      DeploymentId: !Ref ApiGwRestApiBetaDeployment
+      Description: 'Beta stage for rest api gw'
+      AccessLogSetting:
+        DestinationArn: !GetAtt "PublicApiLogGroup.Arn"
+        Format: '{"requestTime":"$context.requestTime","requestId":"$context.requestId","httpMethod":"$context.httpMethod","path":"$context.path","routeKey":"$context.routeKey","status":$context.status,"responseLatency":$context.responseLatency}'
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          MetricsEnabled: 'true'
+          DataTraceEnabled: 'false'
+  PublicApiLogGroup:
+    Condition: ShouldExposeAPIGW
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 1
+  ApiGwAccountConfig:
+    Condition: ShouldExposeAPIGW
+    Type: "AWS::ApiGateway::Account"
+    Properties:
+      CloudWatchRoleArn: !GetAtt "ApiGatewayLoggingRole.Arn"
+  ApiGatewayLoggingRole:
+    Condition: ShouldExposeAPIGW
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - "apigateway.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+
+
+Outputs:
+  ServiceName:
+    Description: Nome del servizio di cui fare deploy
+    Value: !Sub '${ECSService.Name}'
+  ServiceARN:
+    Description: Service ARN
+    Value: !Sub '${ECSService.ServiceArn}'
+

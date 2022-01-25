@@ -5,7 +5,6 @@ Parameters:
   QueueName:
     Type: String
     Description:  Queue Name
-    Default: pn-delivery-queue
   DelaySeconds:
     Description: The time in seconds that the delivery of all messages in the queue
       is delayed. You can specify an integer value of 0 to 900 (15 minutes).
@@ -15,16 +14,20 @@ Parameters:
     Description: 'The number of seconds that Amazon SQS retains a message. You can
       specify an integer value from 60 seconds (1 minute) to 1209600 seconds (14 days). '
     Type: Number
-    Default: '36000'
+    Default: '1209600'
   DeadLetterQueueName:
     Type: String
     Description: Dead Letter Queue Name
-    Default: pn-delivery-dead-letter-queue
   MaxReceiveCount:
     Description: 'The number of times a message is delivered to the source queue before
      being moved to the dead-letter queue'
     Type: Number
     Default: '5'
+  DeadLetterMessageRetentionPeriod:
+    Description: 'The number of seconds that the DLQ retains a message. You can
+      specify an integer value from 60 seconds (1 minute) to 1209600 seconds (14 days). '
+    Type: Number
+    Default: '1209600'
 
 Resources:
 
@@ -42,6 +45,7 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Ref DeadLetterQueueName
+      MessageRetentionPeriod: !Ref DeadLetterMessageRetentionPeriod
 
 Outputs:
   QueueURL:

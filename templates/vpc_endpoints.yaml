@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+
+Parameters:
+  EnvName:
+    Type: String
+    Description: Nome dell'ambiente destinazione
+  EnvNumber:
+    Type: String
+    Description: Second byte from the left for VPC CIDR
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+
+  RouteTableIds:
+    Type: List<AWS::EC2::RouteTable::Id>
+
+
+Resources:
+
+  InterfaceSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Controls Inbound Access to the VPC Interface Endpoint from within the VPC'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - FromPort: '0'
+          ToPort: '65535'
+          IpProtocol: tcp
+          CidrIp: !Join ['', ["10.", !Ref "EnvNumber", ".0.0/16" ]]
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvName}-Interface-Endpoint-SecGrp'
+
+  # Connection to AWS Services
+  S3VPCGatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Gateway
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action: '*'
+            Effect: Allow
+            Resource: '*'
+            Principal: '*'
+      RouteTableIds: !Ref RouteTableIds
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcId: !Ref VpcId
+  CassandraInterfaceEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref InterfaceSecurityGroup
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.cassandra'
+      SubnetIds: !Ref Subnets
+      VpcId: !Ref VpcId
+
+  SQSInterfaceEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref InterfaceSecurityGroup
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.sqs'
+      SubnetIds: !Ref Subnets
+      VpcId: !Ref VpcId
+
+
+

@@ -22,20 +22,6 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvName}-VPC
 
-  InterfaceSecurityGroup:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'Controls Inbound Access to the VPC Interface Endpoint from within the VPC'
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        - FromPort: '0'
-          ToPort: '65535'
-          IpProtocol: tcp
-          CidrIp: !Join ['', ["10.", !Ref "EnvNumber", ".0.0/16" ]]
-      Tags:
-        - Key: Name
-          Value: !Sub '${EnvName}-Interface-Endpoint-SecGrp'
-
   # Internet connections
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -113,54 +99,6 @@ Resources:
       RouteTableId: !Ref PublicRouteTable2
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
-
-  # Connection to AWS Services
-  S3VPCGatewayEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcEndpointType: Gateway
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Action: '*'
-            Effect: Allow
-            Resource: '*'
-            Principal: '*'
-      RouteTableIds:
-        - !Ref 'PublicRouteTable1'
-        - !Ref 'PublicRouteTable2'
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
-      VpcId: !Ref VPC
-  CassandraInterfaceEndpoint:
-    Type: 'AWS::EC2::VPCEndpoint'
-    Properties:
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SecurityGroupIds:
-        - !Ref InterfaceSecurityGroup
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.cassandra'
-      SubnetIds:
-        - !Ref PublicSubnet1
-        - !Ref PublicSubnet2
-      VpcId: !Ref VPC
-    DependsOn:
-      - PublicRouteTable1
-      - PublicRouteTable2
-  SQSInterfaceEndpoint:
-    Type: 'AWS::EC2::VPCEndpoint'
-    Properties:
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SecurityGroupIds:
-        - !Ref InterfaceSecurityGroup
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.sqs'
-      SubnetIds:
-        - !Ref PublicSubnet1
-        - !Ref PublicSubnet2
-      VpcId: !Ref VPC
-    DependsOn:
-      - PublicRouteTable1
-      - PublicRouteTable2
 
   # Network security groups
   WebappSecurityGroup:
@@ -457,3 +395,8 @@ Outputs:
     Export:
       Name: !Sub '${EnvName}-attachments-bucket-arn'
 
+  PublicRouteTable1:
+    Value: !Ref PublicRouteTable1
+
+  PublicRouteTable2:
+    Value: !Ref PublicRouteTable2

@@ -21,21 +21,35 @@ Resources:
   VPC:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/VPC.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/vpc.yaml"
       Parameters:
         EnvName: !Ref EnvName
         EnvNumber: !Ref EnvNumber
 
 
-  ECSCluster:
+  VPCEndpoints:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/ecs_deployment.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/vpc_endpoints.yaml"
       Parameters:
+        EnvName: !Ref EnvName
+        EnvNumber: !Ref EnvNumber
         Subnets:
           Fn::Join:
             - ","
             - - !GetAtt VPC.Outputs.PublicSubnet1Id
               - !GetAtt VPC.Outputs.PublicSubnet2Id
+        RouteTableIds:
+          Fn::Join:
+            - ","
+            - - !GetAtt VPC.Outputs.PublicRouteTable1
+              - !GetAtt VPC.Outputs.PublicRouteTable2
         VpcId: !GetAtt VPC.Outputs.VpcId
+
+
+  ECSCluster:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/ecs_cluster.yaml"
+      Parameters:
         EnvName: !Ref EnvName
