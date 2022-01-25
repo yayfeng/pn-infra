@@ -16,7 +16,7 @@ Parameters:
     Type: List<AWS::EC2::Subnet::Id>
 
   RouteTableIds:
-    Type: List<AWS::EC2::RouteTable::Id>
+    Type: List<String>
 
 
 Resources:
