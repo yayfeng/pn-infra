@@ -25,7 +25,7 @@ Resources:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
       GroupDescription: 'Controls Inbound Access to the VPC Interface Endpoint from within the VPC'
-      VpcId: !Ref VPC
+      VpcId: !Ref VpcId
       SecurityGroupIngress:
         - FromPort: '0'
           ToPort: '65535'
