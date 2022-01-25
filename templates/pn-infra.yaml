@@ -30,7 +30,7 @@ Resources:
   VPCEndpoints:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/vpc_endpoints.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/vpc-endpoints.yaml"
       Parameters:
         EnvName: !Ref EnvName
         EnvNumber: !Ref EnvNumber
@@ -46,6 +46,20 @@ Resources:
               - !GetAtt VPC.Outputs.PublicRouteTable2
         VpcId: !GetAtt VPC.Outputs.VpcId
 
+  ### LoadBalancer ###
+  LoadBalancer:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplateBucket}/templates/load-balancer.yaml"
+      Parameters:
+        EnvName: !Ref EnvName
+        Subnets:
+          Fn::Join:
+            - ","
+            - - !GetAtt VPC.Outputs.PublicSubnet1Id
+              - !GetAtt VPC.Outputs.PublicSubnet2Id
+        VpcId: !GetAtt VPC.Outputs.VpcId
+
   ### ECS ###
   ECSCluster:
     Type: AWS::CloudFormation::Stack
@@ -54,6 +68,11 @@ Resources:
       Parameters:
         EnvName: !Ref EnvName
 
+  ### S3 ###
+  AttachmentsBucket:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/s3.yaml"
 
   ### SQS ###
   DeliveryPushInputsQueue:
@@ -115,3 +134,66 @@ Resources:
         DelaySeconds: 2
         MessageRetentionPeriod: 36000 # 10h
         DeadLetterQueueName: !Sub '${EnvName}-delivery_push_actions-done-dlq'
+
+Outputs:
+  ### SQS outputs ###
+  DeliveryPushInputsQueueArn:
+    Value: !Sub '${DeliveryPushInputsQueue.Arn}'
+    Description: 'workflow input events queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-delpush-input-queue-arn'
+  DeliveryPushInputsQueueName:
+    Value: !Sub '${DeliveryPushInputsQueue.QueueName}'
+    Description: 'workflow input events queue Name'
+    Export:
+      Name: !Sub '${EnvName}-delpush-input-queue-name'
+  DeliveryPushActionsQueueArn:
+    Value: !Sub '${DeliveryPushActionsQueue.Arn}'
+    Description: 'workflow actions queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-delpush-actions-queue-arn'
+  DeliveryPushActionsQueueName:
+    Value: !Sub '${DeliveryPushActionsQueue.QueueName}'
+    Description: 'workflow actions queue Name'
+    Export:
+      Name: !Sub '${EnvName}-delpush-actions-queue-name'
+  ExternalChannelsInputsQueueArn:
+    Value: !Sub '${ExternalChannelsInputsQueue.Arn}'
+    Description: 'external channel input events queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-input-queue-arn'
+  ExternalChannelsInputsQueueName:
+    Value: !Sub '${ExternalChannelsInputsQueue.QueueName}'
+    Description: 'external channel input events queue Name'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-input-queue-name'
+  ExternalChannelsOutputsQueueArn:
+    Value: !Sub '${ExternalChannelsOutputsQueue.Arn}'
+    Description: 'external channel output events queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-output-queue-arn'
+  ExternalChannelsOutputsQueueName:
+    Value: !Sub '${ExternalChannelsOutputsQueue.QueueName}'
+    Description: 'external channel output events queue Name'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-output-queue-name'
+  DeliveryPushActionsDoneQueueArn:
+    Value: !Sub '${DeliveryPushActionsDoneQueue.Arn}'
+    Description: 'workflow actions done queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-delpush-actions-done-queue-arn'
+  DeliveryPushActionsDoneQueueName:
+    Value: !Sub '${DeliveryPushActionsDoneQueue.QueueName}'
+    Description: 'workflow actions done queue Name'
+    Export:
+      Name: !Sub '${EnvName}-delpush-actions-done-queue-name'
+  ExternalChannelsElabResQueueArn:
+    Value: !Sub '${ExternalChannelsElabResQueue.Arn}'
+    Description: 'external channel ElabRes events queue ARN'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-elabres-queue-arn'
+  ExternalChannelsElabResQueueName:
+    Value: !Sub '${ExternalChannelsElabResQueue.QueueName}'
+    Description: 'external channel ElabRes events queue Name'
+    Export:
+      Name: !Sub '${EnvName}-extchannel-elabres-queue-name'

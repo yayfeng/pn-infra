@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Resources:
+  AttachmentsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      # No default retentin neither legal hold.
+      # Can define retention period or legal hold when upload new object or version
+      ObjectLockEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedOrigins:
+              #- { 'Fn::ImportValue': { 'Fn::Sub':'${EnvName}-cdn-url'}}
+              - "*"
+            ExposedHeaders:
+              - "x-amz-version-id"
+
+Outputs:
+  AttachmentsBucketName:
+    Value: !Sub '${AttachmentsBucket}'
+    Description: 'Attachments bucket Name'
+    Export:
+      Name: !Sub '${EnvName}-attachments-bucket-name'
+  AttachmentsBucketArn:
+    Value: !Sub '${AttachmentsBucket.Arn}'
+    Description: 'Attachments bucket ARN'
+    Export:
+      Name: !Sub '${EnvName}-attachments-bucket-arn'
+

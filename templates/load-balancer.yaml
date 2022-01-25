@@ -1,0 +1,137 @@
+
+AWSTemplateFormatVersion: 2010-09-09
+
+
+Parameters:
+  EnvName:
+    Type: String
+    Description: Nome dell'ambiente destinazione
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+
+Resources:
+
+  # Network security groups
+  WebappSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvName}-webapp-security-group
+      GroupDescription: "ingres tcp 8080, egress all"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: "0.0.0.0/0"
+      VpcId: !Ref VpcId
+
+  # Application load balancer
+  PrivateApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets: !Ref Subnets
+      SecurityGroups:
+        - !Ref WebappSecurityGroup
+
+  # Network load balancer
+  PrivateNetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: network
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets: !Ref Subnets
+
+  ExtChaPrivateApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets: !Ref Subnets
+      SecurityGroups:
+        - !Ref WebappSecurityGroup
+
+  ExtChaPrivateNetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: network
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets: !Ref Subnets
+
+  # API Gateway integrations
+  PrivateNlbLink:
+    Type: AWS::ApiGateway::VpcLink
+    Properties:
+      Name: !Sub '${EnvName}-priv-nlb-link'
+      Description: "API-GW link to Network load balancer"
+      TargetArns:
+        - !Ref PrivateNetworkLoadBalancer
+
+  ExtChaPrivateNlbLink:
+    Type: AWS::ApiGateway::VpcLink
+    Properties:
+      Name: !Sub '${EnvName}-extcha-priv-nlb-link'
+      Description: "API-GW link to External Channel Network load balancer"
+      TargetArns:
+        - !Ref ExtChaPrivateNetworkLoadBalancer
+  #PrivateAlbLink:
+  #  Type: AWS::ApiGatewayV2::VpcLink
+  #  Properties:
+  #    Name: !Sub '${EnvName}-priv-alb-link'
+  #    SecurityGroupIds:
+  #      - !Ref WebappSecurityGroup
+  #    SubnetIds:
+  #      - !Ref PublicSubnet1
+  #      - !Ref PublicSubnet2
+
+
+Outputs:
+  # - API Gateway access informations
+  PrivateNetworkLoadBalancer:
+    Value: !Ref PrivateNetworkLoadBalancer
+    Description: Identificativo VPC Network Load Balancer
+    Export:
+      Name: !Sub '${EnvName}-nlb-id'
+  PrivateApplicationLoadBalancer:
+    Value: !Ref PrivateApplicationLoadBalancer
+    Description: Identificativo VPC Application Load Balancer
+    Export:
+      Name: !Sub '${EnvName}-alb-id'
+  PrivateNlbLink:
+    Value: !Ref PrivateNlbLink
+    Description: Used by API-Gw to connect into VPC
+    Export:
+      Name: !Sub '${EnvName}-nlb-link-id'
+  ExtChaPrivateNlbLink:
+    Value: !Ref ExtChaPrivateNlbLink
+    Description: Used by API-Gw to connect into VPC
+    Export:
+      Name: !Sub '${EnvName}-extcha-nlb-link-id'
+  ExtChaPrivateNetworkLoadBalancer:
+    Value: !Ref ExtChaPrivateNetworkLoadBalancer
+    Description: Id VPC External Channel nlb
+    Export:
+      Name: !Sub '${EnvName}-extcha-nlb-id'
+  ExtChaPrivateApplicationLoadBalancer:
+    Value: !Ref ExtChaPrivateApplicationLoadBalancer
+    Description: Id VPC External Channel alb
+    Export:
+      Name: !Sub '${EnvName}-extcha-alb-id'
+  PrivateApplicationLoadBalancerDomain:
+    Value: !Sub '${PrivateApplicationLoadBalancer.DNSName}'
+    Description: Identificativo VPC Application Load Balancer
+    Export:
+      Name: !Sub '${EnvName}-alb-domain'
+  ExtChaPrivateApplicationLoadBalancerDomain:
+    Value: !Sub '${ExtChaPrivateApplicationLoadBalancer.DNSName}'
+    Description: Identificativo VPC Application Load Balancer
+    Export:
+      Name: !Sub '${EnvName}-extcha-alb-domain'
