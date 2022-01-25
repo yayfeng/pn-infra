@@ -184,57 +184,6 @@ Resources:
   #      - !Ref PublicSubnet1
   #      - !Ref PublicSubnet2
 
-  # Comunication queues
-  DeliveryPushInputsQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub '${EnvName}-delivery_push_inputs'
-      DelaySeconds: 1
-      MessageRetentionPeriod: 36000 # 10h
-      ReceiveMessageWaitTimeSeconds: 5
-      VisibilityTimeout: 10 # seconds
-  DeliveryPushActionsQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub '${EnvName}-delivery_push_actions'
-      DelaySeconds: 1
-      MessageRetentionPeriod: 36000 # 10h
-      ReceiveMessageWaitTimeSeconds: 5
-      VisibilityTimeout: 10 # seconds
-  ExternalChannelsInputsQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub '${EnvName}-external_channel_inputs'
-      DelaySeconds: 1
-      MessageRetentionPeriod: 36000 # 10h
-      ReceiveMessageWaitTimeSeconds: 5
-      VisibilityTimeout: 10 # seconds
-  ExternalChannelsOutputsQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub '${EnvName}-external_channel_outputs'
-      DelaySeconds: 1
-      MessageRetentionPeriod: 36000 # 10h
-      ReceiveMessageWaitTimeSeconds: 5
-      VisibilityTimeout: 10 # seconds
-  ExternalChannelsElabResQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub '${EnvName}-external_channel_elab_res'
-      DelaySeconds: 1
-      MessageRetentionPeriod: 36000 # 10h
-      ReceiveMessageWaitTimeSeconds: 5
-      VisibilityTimeout: 10 # seconds
-
-  # External comunication queue
-  DeliveryPushActionsDoneQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub '${EnvName}-delivery_push_actions-done'
-      DelaySeconds: 2
-      MessageRetentionPeriod: 36000 # 10h
-      ReceiveMessageWaitTimeSeconds: 5
-      VisibilityTimeout: 10 # seconds
 
   AttachmentsBucket:
     Type: AWS::S3::Bucket

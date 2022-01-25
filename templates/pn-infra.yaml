@@ -18,6 +18,7 @@ Parameters:
       The S3 bucket from which to fetch the templates used by this stack.
 
 Resources:
+  ### VPC ###
   VPC:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -25,7 +26,6 @@ Resources:
       Parameters:
         EnvName: !Ref EnvName
         EnvNumber: !Ref EnvNumber
-
 
   VPCEndpoints:
     Type: AWS::CloudFormation::Stack
@@ -46,10 +46,72 @@ Resources:
               - !GetAtt VPC.Outputs.PublicRouteTable2
         VpcId: !GetAtt VPC.Outputs.VpcId
 
-
+  ### ECS ###
   ECSCluster:
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/ecs_cluster.yaml"
       Parameters:
         EnvName: !Ref EnvName
+
+
+  ### SQS ###
+  DeliveryPushInputsQueue:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      Parameters:
+        QueueName: !Sub '${EnvName}-delivery_push_inputs'
+        DelaySeconds: 1
+        MessageRetentionPeriod: 36000 # 10h
+        DeadLetterQueueName: !Sub '${EnvName}-delivery_push_inputs-dlq'
+
+  DeliveryPushActionsQueue:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      Parameters:
+        QueueName: !Sub '${EnvName}-delivery_push_actions'
+        DelaySeconds: 1
+        MessageRetentionPeriod: 36000 # 10h
+        DeadLetterQueueName: !Sub '${EnvName}-delivery_push_actions-dlq'
+
+  ExternalChannelsInputsQueue:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      Parameters:
+        QueueName: !Sub '${EnvName}-external_channel_inputs'
+        DelaySeconds: 1
+        MessageRetentionPeriod: 36000 # 10h
+        DeadLetterQueueName: !Sub '${EnvName}-external_channel_inputs-dlq'
+
+  ExternalChannelsOutputsQueue:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      Parameters:
+        QueueName: !Sub '${EnvName}-external_channel_outputs'
+        DelaySeconds: 1
+        MessageRetentionPeriod: 36000 # 10h
+        DeadLetterQueueName: !Sub '${EnvName}-external_channel_outputs-dlq'
+
+  ExternalChannelsElabResQueue:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      Parameters:
+        QueueName: !Sub '${EnvName}-external_channel_elab_res'
+        DelaySeconds: 1
+        MessageRetentionPeriod: 36000 # 10h
+        DeadLetterQueueName: !Sub '${EnvName}-external_channel_elab_res-dlq'
+
+  DeliveryPushActionsDoneQueue:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      Parameters:
+        QueueName: !Sub '${EnvName}-delivery_push_actions-done'
+        DelaySeconds: 2
+        MessageRetentionPeriod: 36000 # 10h
+        DeadLetterQueueName: !Sub '${EnvName}-delivery_push_actions-done-dlq'
