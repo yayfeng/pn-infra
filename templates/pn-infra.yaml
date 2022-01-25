@@ -73,6 +73,8 @@ Resources:
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/s3.yaml"
+      Parameters:
+        EnvName: !Ref EnvName
 
   ### SQS ###
   DeliveryPushInputsQueue:
@@ -142,4 +144,3 @@ Outputs:
     Description: 'workflow input events queue ARN'
     Export:
       Name: !Sub '${EnvName}-delpush-input-queue-arn'
-  
