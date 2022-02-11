@@ -21,6 +21,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvName}-VPC
+        - Key: TestTag
+          Value: testTagValue
 
   # Internet connections
   InternetGateway:
