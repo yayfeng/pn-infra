@@ -84,7 +84,7 @@ Resources:
       Parameters:
         QueueName: !Sub '${EnvName}-delivery_push_inputs'
         DelaySeconds: 1
-        MessageRetentionPeriod: 18000 # 10h
+        MessageRetentionPeriod: 36000 # 10h
         DeadLetterQueueName: !Sub '${EnvName}-delivery_push_inputs-dlq'
 
   DeliveryPushActionsQueue:
