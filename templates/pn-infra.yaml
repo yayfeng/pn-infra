@@ -26,6 +26,7 @@ Resources:
       Parameters:
         EnvName: !Ref EnvName
         EnvNumber: !Ref EnvNumber
+        Random: 1234
 
   VPCEndpoints:
     Type: AWS::CloudFormation::Stack
