@@ -26,7 +26,6 @@ Resources:
       Parameters:
         EnvName: !Ref EnvName
         EnvNumber: !Ref EnvNumber
-        Random: 1234
 
   VPCEndpoints:
     Type: AWS::CloudFormation::Stack
@@ -85,7 +84,7 @@ Resources:
       Parameters:
         QueueName: !Sub '${EnvName}-delivery_push_inputs'
         DelaySeconds: 1
-        MessageRetentionPeriod: 36000 # 10h
+        MessageRetentionPeriod: 18000 # 10h
         DeadLetterQueueName: !Sub '${EnvName}-delivery_push_inputs-dlq'
 
   DeliveryPushActionsQueue:
