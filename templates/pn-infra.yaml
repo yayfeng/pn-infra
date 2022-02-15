@@ -65,12 +65,12 @@ Resources:
         VpcId: !GetAtt VPC.Outputs.VpcId
 
   ### ECS ###
-  ECSCluster:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/${TemplatePrefix}/templates/ecs_cluster.yaml"
-      Parameters:
-        EnvName: !Ref EnvName
+#  ECSCluster:
+#    Type: AWS::CloudFormation::Stack
+#    Properties:
+#      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/${TemplatePrefix}/templates/ecs_cluster.yaml"
+#      Parameters:
+#        EnvName: !Ref EnvName
 
   ### S3 ###
   AttachmentsBucket:
