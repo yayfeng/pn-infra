@@ -22,7 +22,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvName}-VPC
         - Key: TestTag
-          Value: testTagValue
+          Value: NewTagValue
 
   # Internet connections
   InternetGateway:
