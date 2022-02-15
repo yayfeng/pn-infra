@@ -128,7 +128,7 @@ Resources:
       Parameters:
         QueueName: !Sub '${EnvName}-external_channel_elab_res'
         DelaySeconds: 1
-        MessageRetentionPeriod: 36000 # 10h
+        MessageRetentionPeriod: 18000 # 10h
         DeadLetterQueueName: !Sub '${EnvName}-external_channel_elab_res-dlq'
 
   DeliveryPushActionsDoneQueue:
