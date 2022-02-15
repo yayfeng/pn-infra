@@ -54,7 +54,7 @@ Resources:
   LoadBalancer:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplateBucket}/${TemplatePrefix}/templates/load-balancer.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/${TemplatePrefix}/templates/load-balancer.yaml"
       Parameters:
         EnvName: !Ref EnvName
         Subnets:
