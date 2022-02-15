@@ -17,12 +17,16 @@ Parameters:
     Description: >
       The S3 bucket from which to fetch the templates used by this stack.
 
+  TemplatePrefix:
+    Type: String
+    Description: the S3 prefix for CFN template
+
 Resources:
   ### VPC ###
   VPC:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/vpc.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/{TemplatePrefix}/templates/vpc.yaml"
       Parameters:
         EnvName: !Ref EnvName
         EnvNumber: !Ref EnvNumber
@@ -30,7 +34,7 @@ Resources:
   VPCEndpoints:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/vpc-endpoints.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/{TemplatePrefix}/templates/vpc-endpoints.yaml"
       Parameters:
         EnvName: !Ref EnvName
         EnvNumber: !Ref EnvNumber
@@ -50,7 +54,7 @@ Resources:
   LoadBalancer:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplateBucket}/templates/load-balancer.yaml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplateBucket}/{TemplatePrefix}/templates/load-balancer.yaml"
       Parameters:
         EnvName: !Ref EnvName
         Subnets:
@@ -64,7 +68,7 @@ Resources:
   ECSCluster:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/ecs_cluster.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/{TemplatePrefix}/templates/ecs_cluster.yaml"
       Parameters:
         EnvName: !Ref EnvName
 
@@ -72,7 +76,7 @@ Resources:
   AttachmentsBucket:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/s3.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/{TemplatePrefix}/templates/s3.yaml"
       Parameters:
         EnvName: !Ref EnvName
 
@@ -80,7 +84,7 @@ Resources:
   DeliveryPushInputsQueue:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/{TemplatePrefix}/templates/sqs.yaml"
       Parameters:
         QueueName: !Sub '${EnvName}-delivery_push_inputs'
         DelaySeconds: 1
@@ -90,7 +94,7 @@ Resources:
   DeliveryPushActionsQueue:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/{TemplatePrefix}/templates/sqs.yaml"
       Parameters:
         QueueName: !Sub '${EnvName}-delivery_push_actions'
         DelaySeconds: 1
@@ -100,7 +104,7 @@ Resources:
   ExternalChannelsInputsQueue:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/{TemplatePrefix}/templates/sqs.yaml"
       Parameters:
         QueueName: !Sub '${EnvName}-external_channel_inputs'
         DelaySeconds: 1
@@ -110,7 +114,7 @@ Resources:
   ExternalChannelsOutputsQueue:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/{TemplatePrefix}/templates/sqs.yaml"
       Parameters:
         QueueName: !Sub '${EnvName}-external_channel_outputs'
         DelaySeconds: 1
@@ -120,7 +124,7 @@ Resources:
   ExternalChannelsElabResQueue:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/{TemplatePrefix}/templates/sqs.yaml"
       Parameters:
         QueueName: !Sub '${EnvName}-external_channel_elab_res'
         DelaySeconds: 1
@@ -130,7 +134,7 @@ Resources:
   DeliveryPushActionsDoneQueue:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/templates/sqs.yaml"
+      TemplateURL: !Sub "https://s3.eu-west-1.amazonaws.com/${TemplateBucket}/{TemplatePrefix}/templates/sqs.yaml"
       Parameters:
         QueueName: !Sub '${EnvName}-delivery_push_actions-done'
         DelaySeconds: 2
