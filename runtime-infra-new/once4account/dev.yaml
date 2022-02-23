@@ -21,52 +21,6 @@ Resources:
     Properties:
       DisplayName: !Sub 'dev account alarms topic'
 
-  # - Connect dev alarm to slack developers channel
-  AlarmSNSTopicSlackConnection:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub "${TemplateBucketBaseUrl}/fragments/sns-topic-to-slack-channel.yaml"
-      Parameters:
-        TopicName: 'dev_alarm'
-        SNSTopicArn: !Ref AlarmSNSTopic
-        SlackInfo: !Ref SlackInfo
-
-  # - Event Bridge events that generate an alarm
-  # "ACM Certificate Approaching Expiration": alarm
-  CertificateExpiringIsAlarmEventRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Description: "EventRule"
-      EventPattern:
-        source: [ "aws.acm" ]
-        detail-type: [ "ACM Certificate Approaching Expiration" ]
-      Targets:
-        - Arn: !Ref AlarmSNSTopic
-          Id: "AlarmSnsTopic"
-
-  ###              API GATEWAY ACCOUNT-GLOBAL CONFIGURATIONS              ###
-  ###########################################################################
-  # - Enable API-Gateway access log capability
-  ApiGwAccountConfig:
-    Type: AWS::ApiGateway::Account
-    Properties:
-      CloudWatchRoleArn: !GetAtt "ApiGatewayLoggingRole.Arn"
-
-  # - Grant CloudWatch write access permission to AWS API-Gateway
-  ApiGatewayLoggingRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - "apigateway.amazonaws.com"
-            Action: "sts:AssumeRole"
-      Path: "/"
-      ManagedPolicyArns:
-        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
 
 Outputs:
 
