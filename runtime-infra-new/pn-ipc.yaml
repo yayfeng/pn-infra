@@ -54,27 +54,6 @@ Resources:
   ###            COMMON RESOURCES FOR WEB API AND DISTRIBUTIONS            ###
   ############################################################################
 
-  # Custom domain for B2B api
-  ApiCustomDomain:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub "${TemplateBucketBaseUrl}/fragments/api-gw-custom-domain.yaml"
-      Parameters:
-        DnsName: !Ref ApiDnsName
-        CertificateArn: !Ref ApiCertificateArn
-        HostedZoneId: !Ref HostedZoneId
-
-  # Custom domain for B2B api
-  WebApiCustomDomain:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub "${TemplateBucketBaseUrl}/fragments/api-gw-custom-domain.yaml"
-      Parameters:
-        DnsName: !Ref WebApiDnsName
-        CertificateArn: !Ref WebApiCertificateArn
-        HostedZoneId: !Ref HostedZoneId
-
-
   ###                     MESSAGE ORIENTED MIDDLEWARE                     ###
   ###########################################################################
 
@@ -107,14 +86,6 @@ Resources:
 
 
 Outputs:
-  # Web API for browsers and B2B
-  ApiDnsName:
-    Value: !Ref ApiDnsName
-    Description: 'The DNS name used for B2B rest API.'
-  WebApiDnsName:
-    Value: !Ref WebApiDnsName
-    Description: 'The DNS name used for browser rest API.'
-
   # Delivery push inputs
   DeliveryPushInputsQueueName:
     Value: !GetAtt DeliveryPushInputsQueue.Outputs.QueueName
